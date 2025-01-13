@@ -1,0 +1,317 @@
+<!-- Save this entire file with .html extension (e.g., "color_match_game.html") -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Color Match Shooting Game</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: black;
+      font-family: Arial, sans-serif;
+    }
+    canvas {
+      display: block;
+    }
+    #refreshButton {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 10px 20px;
+      background-color: white;
+      color: black;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+      display: none;
+    }
+    #notification {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 40px;
+      text-align: center;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="notification"></div>
+<button id="refreshButton" onclick="location.reload()">Restart</button>
+<script>
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  let score = 0;
+  let lives = 5;
+  let level = 1;
+  const levelGoals = [6, 10, 18, 34, 66];
+  let levelGoal = levelGoals[level - 1];
+  const colors = ['red', 'blue', 'green', 'yellow'];
+  let rocketColor = colors[Math.floor(Math.random() * colors.length)];
+  const dots = [];
+  const bullets = [];
+  const stars = [];
+  const animations = [];
+  const baseLineY = canvas.height - 8;
+  
+  const rocket = {
+    x: canvas.width / 2,
+    y: canvas.height - 150,
+    width: 30,
+    height: 45,
+    color: rocketColor,
+  };
+
+  class Animation {
+    constructor(x, y, type, color) {
+      this.x = x;
+      this.y = y;
+      this.type = type;
+      this.color = color;
+      this.frame = 0;
+      this.maxFrames = 10;
+      this.size = type === 'blast' ? 20 : 30;
+    }
+
+    draw() {
+      ctx.beginPath();
+      if (this.type === 'blast') {
+        ctx.globalAlpha = 1 - (this.frame / this.maxFrames);
+        ctx.arc(this.x, this.y, this.size * (this.frame / 5), 0, Math.PI * 2);
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      } else {
+        for (let i = 0; i < 8; i++) {
+          const angle = (Math.PI * 2 / 8) * i;
+          const distance = (this.frame / this.maxFrames) * this.size;
+          const x = this.x + Math.cos(angle) * distance;
+          const y = this.y + Math.sin(angle) * distance;
+          ctx.arc(x, y, 2, 0, Math.PI * 2);
+        }
+        ctx.fillStyle = this.color;
+        ctx.globalAlpha = 1 - (this.frame / this.maxFrames);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.closePath();
+    }
+
+    update() {
+      this.frame++;
+      return this.frame < this.maxFrames;
+    }
+  }
+
+  class Star {
+    constructor() {
+      this.x = Math.random() * canvas.width;
+      this.y = Math.random() * canvas.height;
+      this.radius = Math.random() * 2;
+    }
+    draw() {
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+      ctx.fillStyle = 'white';
+      ctx.fill();
+      ctx.closePath();
+    }
+  }
+
+  class Dot {
+    constructor() {
+      this.x = Math.random() * canvas.width;
+      this.y = 0;
+      this.radius = 15;
+      this.color = colors[Math.floor(Math.random() * colors.length)];
+      this.speed = 1 + level * 0.5;
+    }
+    draw() {
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+      ctx.fillStyle = this.color;
+      ctx.fill();
+      ctx.closePath();
+    }
+    update() {
+      this.y += this.speed;
+    }
+  }
+
+  class Bullet {
+    constructor(x, y, color) {
+      this.x = x;
+      this.y = y;
+      this.radius = 5;
+      this.color = color;
+      this.speed = -5;
+    }
+    draw() {
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+      ctx.fillStyle = this.color;
+      ctx.fill();
+      ctx.closePath();
+    }
+    update() {
+      this.y += this.speed;
+    }
+  }
+
+  function drawRocket() {
+    ctx.beginPath();
+    ctx.moveTo(rocket.x, rocket.y);
+    ctx.lineTo(rocket.x - rocket.width / 2, rocket.y + rocket.height);
+    ctx.lineTo(rocket.x + rocket.width / 2, rocket.y + rocket.height);
+    ctx.closePath();
+    ctx.fillStyle = rocket.color;
+    ctx.fill();
+  }
+
+  function drawBaseLine() {
+    ctx.beginPath();
+    ctx.moveTo(0, baseLineY);
+    ctx.lineTo(canvas.width, baseLineY);
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.closePath();
+  }
+
+  function spawnStars() {
+    for (let i = 0; i < 100; i++) {
+      stars.push(new Star());
+    }
+  }
+
+  function drawStars() {
+    stars.forEach(star => star.draw());
+  }
+
+  function spawnDot() {
+    dots.push(new Dot());
+  }
+
+  function fireBullet() {
+    bullets.push(new Bullet(rocket.x, rocket.y, rocket.color));
+    rocket.color = colors[Math.floor(Math.random() * colors.length)];
+  }
+
+  function checkCollision(bullet, dot) {
+    const dist = Math.hypot(bullet.x - dot.x, bullet.y - dot.y);
+    return dist < bullet.radius + dot.radius && bullet.color === dot.color;
+  }
+
+  function showNotification(message) {
+    const notification = document.getElementById('notification');
+    notification.innerText = message;
+    notification.style.display = 'block';
+    setTimeout(() => {
+      notification.style.display = 'none';
+    }, 500);
+  }
+
+  function resetDots() {
+    dots.length = 0;
+  }
+
+  function updateGame() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    drawStars();
+    drawBaseLine();
+
+    for (let i = animations.length - 1; i >= 0; i--) {
+      animations[i].draw();
+      if (!animations[i].update()) {
+        animations.splice(i, 1);
+      }
+    }
+
+    dots.forEach((dot, index) => {
+      dot.draw();
+      dot.update();
+
+      if (dot.y + dot.radius > baseLineY) {
+        animations.push(new Animation(dot.x, baseLineY, 'crash', dot.color));
+        dots.splice(index, 1);
+        lives--;
+      }
+    });
+
+    bullets.forEach((bullet, bulletIndex) => {
+      bullet.draw();
+      bullet.update();
+
+      dots.forEach((dot, dotIndex) => {
+        if (checkCollision(bullet, dot)) {
+          animations.push(new Animation(dot.x, dot.y, 'blast', dot.color));
+          score++;
+          bullets.splice(bulletIndex, 1);
+          dots.splice(dotIndex, 1);
+        }
+      });
+
+      if (bullet.y < 0) bullets.splice(bulletIndex, 1);
+    });
+
+    drawRocket();
+
+    ctx.fillStyle = 'white';
+    ctx.font = '20px Arial';
+    ctx.fillText(`Score: ${score}`, 10, 30);
+    ctx.fillText(`Lives: ${lives}`, 10, 60);
+    ctx.fillText(`Level: ${level}`, canvas.width - 100, 30);
+
+    if (score >= levelGoal) {
+      level++;
+      if (level <= levelGoals.length) {
+        levelGoal = levelGoals[level - 1];
+        showNotification(`Level ${level}`);
+        resetDots();
+        lives = 5;
+      } else {
+        ctx.fillStyle = 'white';
+        ctx.font = '40px Arial';
+        ctx.fillText('You Win!', canvas.width / 2 - 100, canvas.height / 2);
+        document.getElementById('refreshButton').style.display = 'block';
+        return;
+      }
+    }
+
+    if (lives > 0) {
+      requestAnimationFrame(updateGame);
+    } else {
+      ctx.fillStyle = 'white';
+      ctx.font = '40px Arial';
+      ctx.fillText('Game Over!', canvas.width / 2 - 100, canvas.height / 2);
+      document.getElementById('refreshButton').style.display = 'block';
+    }
+  }
+
+  canvas.addEventListener('touchmove', (e) => {
+    const touch = e.touches[0];
+    rocket.x = touch.clientX;
+  });
+
+  canvas.addEventListener('mousemove', (e) => {
+    rocket.x = e.clientX;
+  });
+
+  spawnStars();
+  setInterval(spawnDot, 2000);
+  setInterval(fireBullet, 667);
+  updateGame();
+</script>
+</body>
+</html>
